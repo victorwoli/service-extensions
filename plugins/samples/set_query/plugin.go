@@ -1,4 +1,4 @@
-// Copyright 2025 Google LLC
+// Copyright 2026 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,10 +16,7 @@
 package main
 
 import (
-	"fmt"
 	"net/url"
-	"strings"
-
 	"github.com/proxy-wasm/proxy-wasm-go-sdk/proxywasm"
 	"github.com/proxy-wasm/proxy-wasm-go-sdk/proxywasm/types"
 )
@@ -50,18 +47,6 @@ func (*pluginContext) NewHttpContext(uint32) types.HttpContext {
 }
 
 func (ctx *httpContext) OnHttpRequestHeaders(numHeaders int, endOfStream bool) types.Action {
-	// Recover from any potential panics to avoid crashing the plugin
-	defer func() {
-		if err := recover(); err != nil {
-			proxywasm.SendHttpResponse(
-				500,
-				[][2]string{},
-				[]byte(fmt.Sprintf("Internal Server Error: %v", err)),
-				-1,
-			)
-		}
-	}()
-
 	path, err := proxywasm.GetHttpRequestHeader(":path")
 	if err != nil {
 		proxywasm.LogError("Failed to retrieve the :path header")
@@ -74,23 +59,17 @@ func (ctx *httpContext) OnHttpRequestHeaders(numHeaders int, endOfStream bool) t
 		return types.ActionContinue
 	}
 
-	val := "new val"
-	// Manually replace spaces with '+'
-	encodedVal := strings.ReplaceAll(val, " ", "+")
 	queryParams := parsedURL.Query()
 
 	// Update the query parameters
 	queryParams.Del("key") // Remove existing key if it exists
-	queryParams.Add("key", encodedVal)
+	queryParams.Add("key", "new val")
 
 	// Rebuild the URL with the updated query parameters
 	parsedURL.RawQuery = queryParams.Encode()
 
-	// url.Values.Encode converts spaces to %2B, fix this manually
-	parsedURL.RawQuery = strings.ReplaceAll(parsedURL.RawQuery, "%2B", "+")
-
 	// Replace the request header ":path" with the updated URL
-	proxywasm.ReplaceHttpRequestHeader(":path", parsedURL.String())
+	err = proxywasm.ReplaceHttpRequestHeader(":path", parsedURL.String())
 	if err != nil {
 		proxywasm.LogErrorf("Failed to replace :path header: %v", err)
 		return types.ActionContinue
